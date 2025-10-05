@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>IndiTube Platform — Supabase + Cloudinary</title>
+<style>
+/* UI styles kept same as your original + small extras */
+body { font-family: Arial; margin:0; background:#f6f8fa; padding:0; }
+header { background:#171b27; color:#fff; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.header-left { display:flex; align-items:center; gap:12px; }
+.header-title { font-weight:700; font-size:1.05rem; color:#fff; }
+.header-right { display:flex; align-items:center; gap:10px; font-weight:700; }
+.share-btn { background:#ffeaa7; color:#412616; border:1px solid #412616; padding:6px 10px; border-radius:6px; cursor:pointer; }
+.unlock-badge { background:#ffdede; color:#841111; padding:6px 8px; border-radius:6px; font-weight:700; font-size:0.85rem; display:inline-block; }
+nav { background:#fff; display:flex; border-bottom: 2px solid #0388fc;}
+nav button { flex:1; padding: 12px; border:none; cursor:pointer; font-weight:600; background:none; transition: border-bottom 0.3s; font-size:1rem;}
+nav button.active { border-bottom: 3px solid #0388fc; color:#0388fc; }
+.container { max-width: 950px; margin: 20px auto; background: #fff; border-radius: 8px; padding: 20px; box-shadow:0 4px 25px #171b270a;}
+.wallet { font-weight:700; font-size:1.1rem; color:#fff; margin-left:8px;}
+.card { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 24px; padding: 16px; box-shadow: 0 1px 18px #00000011; position:relative; }
+.header-flex { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.channel-img { width: 40px; height:40px; border-radius: 50%; object-fit: cover }
+.channel-name { font-weight: 700; flex-grow:1; }
+.video-title { font-weight: 700; font-size: 1.15rem; margin-bottom: 8px; }
+video, audio { width: 100%; border-radius: 8px; outline:none; margin-bottom:8px; }
+.player-wrapper { position: relative; margin-bottom: 10px; }
+#uploadProgress { height: 18px; border-radius: 6px; background: #ddd; margin: 10px 0; overflow: hidden; display:none;}
+#uploadProgressBar { background:#0388fc; height: 100%; width: 0%; transition: width 0.3s ease; }
+form label { font-weight: 700; display: block; margin-bottom: 4px; }
+form input[type=text], form input[type=file], form input[type=number], form input[type=email] { width: 100%; padding: 8px; margin-bottom: 12px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; }
+#dashboard { margin-top:20px; }
+#dashboard h2 { margin-bottom:14px; }
+.user-video { padding: 8px; border:1px solid #ddd; border-radius:5px; margin-bottom:10px; }
+.withdraw-form { margin-top: 20px; border:1px solid #ddd; padding:12px; border-radius:6px; background:#f5f5f5; }
+.withdraw-form button { background:#0388fc; color:white; border:none; padding:8px 12px; border-radius:6px; font-weight:700; cursor:pointer; }
+.small-note { font-size: 0.85rem; color:#666; margin-top:6px; }
+.interaction { margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+button.like, button.dislike, button.subscribe, button.share { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 700; user-select:none; transition: background-color 0.2s; }
+button.like.active { background:#0388fc; color:#fff; }
+button.dislike.active { background:#842029; color:#fff; }
+button.subscribe.active { background:#198754; color:#fff; }
+button.share { background:#ffeaa7; color:#412616; border:1px solid #412616; }
+.earning-badge { position:absolute; right:12px; top:10px; background:#0388fcaa; color:#fff; padding:4px 8px; border-radius:6px; font-weight:700; font-size:12px; }
+.counts { display:flex; gap:12px; align-items:center; margin-left:6px; color:#333; font-weight:600; }
+.counts span { display:flex; gap:6px; align-items:center; font-size:0.95rem; }
+
+/* Unlock & status UI */
+.unlock-panel { border:1px dashed #ffbcbe; padding:12px; border-radius:8px; margin-bottom:12px; background:#fff6f6; }
+.history-table { width:100%; border-collapse:collapse; margin-top:12px; }
+.history-table th, .history-table td { border:1px solid #ddd; padding:8px; text-align:left; font-size:0.9rem; }
+.float-share { position:fixed; right:16px; bottom:16px; background:#ffeaa7; color:#412616; padding:10px 12px; border-radius:50px; border:1px solid #412616; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.12); }
+
+.header-search { display:flex; gap:8px; align-items:center; background:#fff; padding:6px 8px; border-radius:8px; }
+.header-search input { border:1px solid #ddd; padding:8px; border-radius:6px; width:300px; }
+.header-search button { padding:8px 10px; border-radius:6px; border:1px solid #ddd; background:#f1f1f1; cursor:pointer; }
+
+.pay-upi-panel { display:none; border:1px solid #ddd; padding:10px; border-radius:8px; background:#fff; margin-top:10px; }
+.pay-upi-panel input { width:100%; padding:8px; margin:6px 0; border-radius:6px; border:1px solid #ccc; }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <div class="header-title">IndiTubee </div>
+    <div id="unlockBadge" class="unlock-badge" style="display:none;">🔒 Locked</div>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:12px;">
+    <div class="header-search">
+      <input id="globalSearch" placeholder="Search videos or channels..." />
+      <button id="searchClearBtn" title="Clear">✖</button>
+    </div>
+    <div class="header-right">
+      <div id="wallet" class="wallet">Coins: 0 (₹0.00)</div>
+      <button id="shareAppHeader" class="share-btn">Share App (<span id="shareCount">0</span>)</button>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="feedVideo">Video Feed</button>
+  <button class="tab-btn" data-tab="feedAudio">Audio Feed</button>
+  <button class="tab-btn" data-tab="bitz">Bitz</button>
+  <button class="tab-btn" data-tab="upload">Upload</button>
+  <button class="tab-btn" data-tab="dashboard">Dashboard</button>
+</nav>
+
+<div class="container">
+  <section id="feedVideo" class="tab-section" style="display:block;"></section>
+  <section id="feedAudio" class="tab-section" style="display:none;"></section>
+  <section id="bitz" class="tab-section" style="display:none;"></section>
+
+  <section id="upload" class="tab-section" style="display:none;">
+    <form id="uploadForm" enctype="multipart/form-data">
+      <label>Channel Name</label>
+      <input type="text" id="channelName" placeholder="Your channel name" required />
+      <label>Channel Image (optional)</label>
+      <input type="file" id="channelImgFile" accept="image/*" />
+      <label>Video/Audio Title</label>
+      <input type="text" id="videoTitle" placeholder="Title" required />
+      <label>Video/Audio File</label>
+      <input type="file" id="videoFile" accept="video/*,audio/*" required />
+      <label><input type="checkbox" id="isShort" /> Short Video (Bitz)</label>
+      <button type="submit">Upload</button>
+      <div id="uploadProgress"><div id="uploadProgressBar"></div></div>
+      <div id="uploadStatus" class="small-note"></div>
+    </form>
+    <div class="small-note">Inditubee - India's Own Video Sharing Network.Your Content is Safely secured With us.</div>
+  </section>
+
+  <section id="dashboard" class="tab-section" style="display:none;">
+    <h2>Your Dashboard</h2>
+    <div id="userEarnings"></div>
+    <div id="userVideos"></div>
+
+    <!-- New QR Code Display -->
+    <div style="margin-top: 20px;">
+      <h3>Your Unique QR Code</h3>
+      <img id="userQrCode" alt="User QR Code" style="width:150px; height:150px; border:1px solid #ddd; border-radius:8px;" />
+    </div>
+
+    <!-- QR Code Scanner -->
+    <div style="margin-top: 20px;">
+      <h3>Scan QR Code</h3>
+      <div id="qr-scanner" style="width: 300px;"></div>
+      <div id="qr-scan-result" style="margin-top: 10px; font-weight: 700;"></div>
+    </div>
+
+    <!-- WITHDRAW SECTION (updated with unlock + share rule + server deduction + history) -->
+    <div class="withdraw-form">
+      <h3>Withdraw Earnings</h3>
+
+      <div id="unlockPanel" class="unlock-panel" style="display:none;">
+        <p><strong>First withdrawal requires:</strong></p>
+        <ol>
+          <li>Pay <strong>₹99</strong> one-time via UPI to <code>inditubee@airtel</code>.</li>
+          <li>Share the app with <strong>2 people</strong>.</li>
+        </ol>
+
+        <div>
+          <button id="payUnlockBtn" style="background:#ff0059;color:#fff;padding:10px 12px;border-radius:6px;border:none;cursor:pointer;">Pay via UPI (Show details)</button>
+        </div>
+
+        <div id="payUpiPanel" class="pay-upi-panel">
+          <div><strong>UPI ID:</strong> <code>inditubee@airtel</code></div>
+          <div class="small-note">Open your UPI app, send ₹99 to the UPI above, then paste the Transaction Reference / UPI Txn ID below and press <strong>"I have paid ₹99"</strong>.</div>
+          <label>Transaction Reference (UPI Txn ID)</label>
+          <input id="upiTxnRef" placeholder="e.g. TXN123456789" />
+          <label>Your UPI (payer UPI) for our records (optional)</label>
+          <input id="payerUpi" placeholder="e.g. yourupi@bank" />
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="confirmUpiPaid" style="background:#198754;color:white;padding:8px 12px;border-radius:6px;border:none;cursor:pointer;">I have paid ₹99</button>
+            <button id="cancelUpiPanel" style="background:#ddd;color:#333;padding:8px 12px;border-radius:6px;border:none;cursor:pointer;">Cancel</button>
+          </div>
+          <div id="payUpiMsg" class="small-note"></div>
+        </div>
+
+        <div id="unlockMessage" class="small-note"></div>
+      </div>
+
+      <form id="withdrawFormNew">
+        <label>Name</label><input type="text" name="Name" id="wName" required>
+        <label>Channel Name</label><input type="text" name="ChannelName" id="wChannel" required>
+        <label>UPI ID</label><input type="text" name="UPI" id="wUPI" required>
+        <label>Email</label><input type="email" name="Email" id="wEmail" required>
+        <label>Phone Number</label><input type="text" name="Phone" id="wPhone" required>
+        <label>Total Coins</label><input type="text" name="Coins" id="withdrawCoins" readonly>
+        <label>Withdraw Amount (Coins)</label><input type="number" name="Amount" id="wAmount" min="1" required>
+        <div class="small-note" id="conversionNote">Conversion: 1 coin = ₹0.05</div>
+        <button id="withdrawSubmitBtn" type="submit">Submit Withdraw</button>
+      </form>
+
+      <div id="withdrawStatus" class="small-note"></div>
+
+      <h4 style="margin-top:14px">Your Withdraw History</h4>
+      <table class="history-table" id="withdrawHistory">
+        <thead><tr><th>Date</th><th>Amount (Coins)</th><th>Amount (₹)</th><th>Status</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <!-- END WITHDRAW -->
+  </section>
+</div>
+
+<button class="float-share" id="floatShareBtn">Share App</button>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+/* ------------------- CONFIG ------------------- */
+/* Your Supabase config (unchanged) */
+const SUPABASE_URL = "https://pladcjtxuqodrhobuqwn.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWRjanR4dXFvZHJob2J1cXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk0NzYxMjgsImV4cCI6MjA3NTA1MjEyOH0.eNbLdyqnvXNjqwVV-WOslhUCX9OHjDt_I7j8UP4Milg";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* Cloudinary unsigned preset (your existing one) */
+const CLOUDINARY_UPLOAD_URL = 'https://api.cloudinary.com/v1_1/dtlbk3ncz/auto/upload';
+const CLOUDINARY_UPLOAD_PRESET = 'inditube';
+
+/* Domain for share landing (customized) */
+const SHARE_LANDING = window.location.href.split('#')[0];
+
+/* Conversion */
+const RUPEE_PER_COIN = 0.05; // 1 coin = ₹0.05
+
+/* ------------------- STATE ------------------- */
+let coins = parseFloat(localStorage.getItem('indiCoins') || 0);
+let currentUserId = localStorage.getItem('indiUserId') || ('user_' + Date.now() + '_' + Math.floor(Math.random()*1000));
+localStorage.setItem('indiUserId', currentUserId);
+
+let unlockDone = localStorage.getItem('unlockDone') === 'true';
+let shareCount = parseInt(localStorage.getItem('shareCount')||'0', 10);
+
+/* UI refs */
+const walletDisplay = document.getElementById('wallet');
+const unlockPanel = document.getElementById('unlockPanel');
+const unlockMessage = document.getElementById('unlockMessage');
+const unlockBadge = document.getElementById('unlockBadge');
+const shareCountEl = document.getElementById('shareCount');
+const withdrawCoinsInput = document.getElementById('withdrawCoins');
+const withdrawStatus = document.getElementById('withdrawStatus');
+const withdrawHistoryBody = document.querySelector('#withdrawHistory tbody');
+const withdrawSubmitBtn = document.getElementById('withdrawSubmitBtn');
+
+const payUnlockBtn = document.getElementById('payUnlockBtn');
+const payUpiPanel = document.getElementById('payUpiPanel');
+const confirmUpiPaid = document.getElementById('confirmUpiPaid');
+const cancelUpiPanel = document.getElementById('cancelUpiPanel');
+const upiTxnRefInput = document.getElementById('upiTxnRef');
+const payerUpiInput = document.getElementById('payerUpi');
+const payUpiMsg = document.getElementById('payUpiMsg');
+
+const globalSearchInput = document.getElementById('globalSearch');
+const searchClearBtn = document.getElementById('searchClearBtn');
+
+function safeHTML(s){ return String(s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function updateWalletUI(){
+  walletDisplay.textContent = `Coins: ${coins.toFixed(2)} (₹${(coins*RUPEE_PER_COIN).toFixed(2)})`;
+  if(withdrawCoinsInput) withdrawCoinsInput.value = coins.toFixed(2);
+  localStorage.setItem('indiCoins', coins);
+  // show unlock badge if not done
+  if(!unlockDone) unlockBadge.style.display = 'inline-block';
+  else unlockBadge.style.display = 'none';
+}
+updateWalletUI();
+
+/* ------------------- Tabs ------------------- */
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-section').forEach(sec=>sec.style.display='none');
+    document.getElementById(btn.dataset.tab).style.display='block';
+    if(btn.dataset.tab === 'dashboard') {
+      loadUserDashboard();
+      refreshWithdrawHistory();
+      checkUnlockUI();
+    }
+    if(btn.dataset.tab === 'feedVideo') loadVideoFeed();
+    if(btn.dataset.tab === 'feedAudio') loadAudioFeed();
+    if(btn.dataset.tab === 'bitz') loadBitzFeed();
+  });
+});
+
+/* ------------------- Share logic (share with people before first payout) ------------------- */
+function updateShareUI(){
+  shareCountEl.textContent = shareCount;
+  localStorage.setItem('shareCount', String(shareCount));
+}
+updateShareUI();
+
+async function shareApp(){
+  const shareLink = SHARE_LANDING;
+  if(navigator.share){
+    try{
+      await navigator.share({ title: 'IndiTube — Check this out', url: shareLink });
+      shareCount++;
+      updateShareUI();
+      await maybeUpdateUserShareCount();
+      alert('Thanks! You shared the app.');
+      checkUnlockUI();
+      return;
+    }catch(e){}
+  }
+  try{
+    await navigator.clipboard.writeText(shareLink);
+    shareCount++;
+    updateShareUI();
+    await maybeUpdateUserShareCount();
+    alert('Share link copied to clipboard — send it to 2 people to unlock payouts.');
+    checkUnlockUI();
+  }catch(err){
+    alert('Could not copy link — please share this URL manually: ' + shareLink);
+  }
+}
+
+document.getElementById('shareAppHeader').addEventListener('click', shareApp);
+document.getElementById('floatShareBtn').addEventListener('click', shareApp);
+
+/* Update user shares count server-side (optional) */
+async function maybeUpdateUserShareCount(){
+  try{
+    const { data } = await supabase.from('users').select('shares').eq('id', currentUserId).limit(1);
+    if(data && data.length){
+      const currentShares = parseInt(data[0].shares||0,10);
+      await supabase.from('users').update({ shares: currentShares + 1 }).eq('id', currentUserId);
+    } else {
+      await supabase.from('users').insert([{ id: currentUserId, coins: coins, shares: shareCount }]);
+    }
+  }catch(e){ console.warn('maybeUpdateUserShareCount err', e); }
+}
+
+/* ------------------- Unlock UI (manual UPI ₹99) ------------------- */
+function checkUnlockUI(){
+  if(!unlockDone){
+    unlockPanel.style.display = 'block';
+    unlockMessage.textContent = `You have shared with ${shareCount} people. You need to share with 2 people and pay ₹99 via UPI to unlock first payout.`;
+    withdrawSubmitBtn.disabled = true;
+  } else {
+    unlockPanel.style.display = 'none';
+    withdrawSubmitBtn.disabled = false;
+  }
+  if(unlockDone && shareCount < 2){
+    withdrawSubmitBtn.disabled = true;
+    unlockMessage.textContent = `You still need to share with ${2 - shareCount} more person(s) to enable payout.`;
+    unlockPanel.style.display = 'block';
+  } else if(unlockDone && shareCount >= 2){
+    withdrawSubmitBtn.disabled = false;
+    unlockPanel.style.display = 'none';
+  }
+}
+checkUnlockUI();
+
+payUnlockBtn.addEventListener('click', ()=>{
+  payUpiPanel.style.display = payUpiPanel.style.display === 'none' ? 'block' : 'none';
+  payUpiMsg.textContent = '';
+});
+
+cancelUpiPanel.addEventListener('click', ()=>{
+  payUpiPanel.style.display = 'none';
+  upiTxnRefInput.value = '';
+  payerUpiInput.value = '';
+  payUpiMsg.textContent = '';
+});
+
+confirmUpiPaid.addEventListener('click', async ()=>{
+  const txn = upiTxnRefInput.value.trim();
+  const payer = payerUpiInput.value.trim();
+  if(!txn){
+    payUpiMsg.textContent = 'Please enter the UPI transaction reference after payment.';
+    return;
+  }
+
+  // Mark unlock locally and attempt to record server-side (no server verification here)
+  unlockDone = true;
+  localStorage.setItem('unlockDone', 'true');
+
+  try{
+    const { data } = await supabase.from('users').select('id').eq('id', currentUserId).limit(1);
+    if(data && data.length){
+      await supabase.from('users').update({ unlocked: true, unlock_txn_ref: txn, payer_upi: payer }).eq('id', currentUserId);
+    } else {
+      await supabase.from('users').insert([{ id: currentUserId, coins: coins, unlocked: true, unlock_txn_ref: txn, payer_upi: payer }]);
+    }
+  }catch(e){
+    console.warn('mark unlock server err', e);
+  }
+
+  payUpiMsg.textContent = 'Thanks — unlock recorded locally. Remember to share with 2 people to enable payouts.';
+  setTimeout(()=>{ payUpiPanel.style.display = 'none'; upiTxnRefInput.value=''; payerUpiInput.value=''; }, 1200);
+  checkUnlockUI();
+});
+
+/* ------------------- HELPERS: DB increments ------------------- */
+async function incrementVideoField(videoId, column, delta=1){
+  try{
+    const { data } = await supabase.from('videos').select(column).eq('id', videoId).limit(1);
+    if(!data || !data.length) return null;
+    const current = parseFloat(data[0][column] || 0);
+    const newVal = current + delta;
+    const { error } = await supabase.from('videos').update({ [column]: newVal }).eq('id', videoId);
+    if(error) { console.warn('increment update err', error); return null; }
+    return newVal;
+  }catch(err){
+    console.warn('incrementVideoField err', err);
+    return null;
+  }
+}
+
+/* ------------------- EARNING & VIEW logic ------------------- */
+/* Rate: 0.28 coins per second */
+const COINS_PER_SEC = 0.28;
+const playStartAt = {};
+const playIntervalRef = {};
+const viewedThisSession = {};
+
+function onPlayStart(videoId){
+  if(playIntervalRef[videoId]) return;
+  playStartAt[videoId] = Date.now();
+  if(!viewedThisSession[videoId]){
+    viewedThisSession[videoId] = true;
+    incrementVideoField(videoId, 'views', 1).catch(()=>{});
+  }
+  playIntervalRef[videoId] = setInterval(()=> {
+    coins += COINS_PER_SEC;
+    updateWalletUI();
+  }, 1000);
+}
+
+async function onPlayStop(videoId){
+  if(playIntervalRef[videoId]){ clearInterval(playIntervalRef[videoId]); delete playIntervalRef[videoId]; }
+  if(!playStartAt[videoId]) return;
+  const watchedMs = Date.now() - playStartAt[videoId];
+  delete playStartAt[videoId];
+  const watchedSec = Math.floor(watchedMs/1000);
+  if(watchedSec <= 0) return;
+  const coinsToPersist = parseFloat((watchedSec * COINS_PER_SEC).toFixed(4));
+  try{
+    await supabase.from('earnings').insert([{
+      userId: currentUserId,
+      mediaId: videoId,
+      seconds: watchedSec,
+      coins: coinsToPersist,
+      created_at: new Date().toISOString()
+    }]);
+  }catch(e){ console.warn('earnings insert err', e); }
+  try{
+    const { data } = await supabase.from('videos').select('earnings').eq('id', videoId).limit(1);
+    if(data && data.length){
+      const currentE = parseFloat(data[0].earnings || 0);
+      const newE = currentE + coinsToPersist;
+      await supabase.from('videos').update({ earnings: newE }).eq('id', videoId);
+    }
+  }catch(e){ console.warn('update videos earnings err', e); }
+}
+
+/* ------------------- Interaction handlers ------------------- */
+function hasLocalFlag(videoId, flag){ return !!localStorage.getItem(`${videoId}_${flag}_${currentUserId}`); }
+function setLocalFlag(videoId, flag){ localStorage.setItem(`${videoId}_${flag}_${currentUserId}`, '1'); }
+
+async function like(videoId){
+  if(hasLocalFlag(videoId,'liked')) return alert('You already liked');
+  setLocalFlag(videoId,'liked');
+  await incrementVideoField(videoId, 'likes', 1);
+  if(hasLocalFlag(videoId,'disliked')){
+    localStorage.removeItem(`${videoId}_disliked_${currentUserId}`);
+    await incrementVideoField(videoId, 'dislikes', -1);
+  }
+  await renderAllFromDBCache();
+}
+
+async function dislike(videoId){
+  if(hasLocalFlag(videoId,'disliked')) return alert('You already disliked');
+  setLocalFlag(videoId,'disliked');
+  await incrementVideoField(videoId, 'dislikes', 1);
+  if(hasLocalFlag(videoId,'liked')){
+    localStorage.removeItem(`${videoId}_liked_${currentUserId}`);
+    await incrementVideoField(videoId, 'likes', -1);
+  }
+  await renderAllFromDBCache();
+}
+
+async function subscribe(videoId){
+  if(hasLocalFlag(videoId,'subscribed')) return alert('You already subscribed');
+  setLocalFlag(videoId,'subscribed');
+  await incrementVideoField(videoId, 'subscribers', 1);
+  await renderAllFromDBCache();
+}
+
+async function share(videoId){
+  await incrementVideoField(videoId, 'shares', 1);
+  const shareLink = `${SHARE_LANDING}?vid=${encodeURIComponent(videoId)}`;
+  const ok = await navigator.clipboard.writeText(shareLink).then(()=>true).catch(()=>false);
+  if(ok) alert('Inditubee link copied: ' + shareLink);
+  else prompt('Copy this Inditubee link:', shareLink);
+  await renderAllFromDBCache();
+}
+
+/* ------------------- Rendering & Search ------------------- */
+let feedCache = [];
+let bitzCache = [];
+
+function createCardHTML(v){
+  const vid = safeHTML(v.id);
+  const channelImg = v.channel_img || '';
+  const channelName = safeHTML(v.channel_name || 'Unknown');
+  const title = safeHTML(v.title || 'Untitled');
+  const url = safeHTML(v.file_url || '');
+  const isVideoFile = !url.match(/.(mp3|wav|ogg)$/i);
+  const likes = v.likes||0, dislikes=v.dislikes||0, subs=v.subscribers||0, shares=v.shares||0, views=v.views||0, earnings=v.earnings||0;
+  const liked = hasLocalFlag(v.id,'liked') ? 'active' : '';
+  const disliked = hasLocalFlag(v.id,'disliked') ? 'active' : '';
+  const subscribed = hasLocalFlag(v.id,'subscribed') ? 'active' : '';
+  const mediaElem = isVideoFile ? 
+    `<video id="player-${v.id}" src="${url}" controls playsinline preload="metadata"></video>` :
+    `<audio id="player-${v.id}" src="${url}" controls preload="metadata"></audio>`;
+
+  return `<div class="card" id="card-${vid}">
+    <div class="header-flex">
+      ${channelImg?`<img src="${channelImg}" class="channel-img"/>`:''}
+      <div class="channel-name">${channelName}</div>
+    </div>
+    <div class="video-title">${title}</div>
+    <div class="player-wrapper">
+      ${mediaElem}
+      <div class="earning-badge">Inditubee</div>
+    </div>
+    <div class="interaction">
+      <button class="like ${liked}" onclick="like('${v.id}')">👍 Like ${likes}</button>
+      <button class="dislike ${disliked}" onclick="dislike('${v.id}')">👎 Dislike ${dislikes}</button>
+      <button class="subscribe ${subscribed}" onclick="subscribe('${v.id}')">🔔 Subscribe ${subs}</button>
+      <button class="share" onclick="share('${v.id}')">🔗 Share ${shares}</button>
+      <div class="counts">
+        <span>👁️ ${views}</span>
+        <span>💰 ₹${(earnings*RUPEE_PER_COIN).toFixed(2)}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderFromCaches(filteredTerm){
+  const feedVideoEl = document.getElementById('feedVideo');
+  const feedAudioEl = document.getElementById('feedAudio');
+  const bitzEl = document.getElementById('bitz');
+
+  feedVideoEl.innerHTML = '';
+  feedAudioEl.innerHTML = '';
+  bitzEl.innerHTML = '';
+
+  function termMatches(v, term){
+    if(!term) return true;
+    term = term.toLowerCase();
+    const t = (v.title||'').toLowerCase();
+    const c = (v.channel_name||'').toLowerCase();
+    return t.includes(term) || c.includes(term);
+  }
+
+  feedCache.forEach(v=>{
+    if(!termMatches(v, filteredTerm)) return;
+    const url = v.file_url || '';
+    if(url.match(/.(mp3|wav|ogg)$/i)){
+      feedAudioEl.insertAdjacentHTML('beforeend', createCardHTML(v));
+    } else {
+      feedVideoEl.insertAdjacentHTML('beforeend', createCardHTML(v));
+    }
+  });
+
+  bitzCache.forEach(v=>{
+    if(!termMatches(v, filteredTerm)) return;
+    bitzEl.insertAdjacentHTML('beforeend', createCardHTML(v));
+  });
+
+  attachPlayerEvents();
+}
+
+async function renderAllFromDBCache(){
+  try{
+    const { data: feedData } = await supabase.from('videos').select('*').eq('is_short', false).order('uploaded_at',{ascending:false}).limit(300);
+    const { data: bitzData } = await supabase.from('videos').select('*').eq('is_short', true).order('uploaded_at',{ascending:false}).limit(300);
+    feedCache = feedData || [];
+    bitzCache = bitzData || [];
+    renderFromCaches(globalSearchInput.value.trim());
+  }catch(e){
+    console.warn('renderAllFromDBCache err', e);
+    const localFeed = JSON.parse(localStorage.getItem('feed')||'[]');
+    const localBitz = JSON.parse(localStorage.getItem('bitz')||'[]');
+    feedCache = localFeed;
+    bitzCache = localBitz;
+    renderFromCaches(globalSearchInput.value.trim());
+  }
+}
+
+/* ------------------- Player events ------------------- */
+function attachPlayerEvents(){
+  document.querySelectorAll('video, audio').forEach(el=>{
+    const id = el.id && el.id.replace('player-','');
+    if(!id) return;
+    if(el.dataset.listenersAttached) return;
+    el.addEventListener('play', ()=> onPlayStart(id));
+    el.addEventListener('pause', ()=> onPlayStop(id));
+    el.addEventListener('ended', ()=> onPlayStop(id));
+    el.dataset.listenersAttached = '1';
+  });
+}
+
+/* ------------------- Fetch functions used at init & on upload ------------------- */
+async function loadVideoFeed(){
+  try{
+    const { data } = await supabase.from('videos').select('*').eq('is_short', false).order('uploaded_at',{ascending:false});
+    feedCache = data || [];
+    renderFromCaches(globalSearchInput.value.trim());
+  }catch(e){
+    console.warn('loadVideoFeed err', e);
+    const localFeed = JSON.parse(localStorage.getItem('feed')||'[]');
+    feedCache = localFeed;
+    renderFromCaches(globalSearchInput.value.trim());
+  }
+}
+
+async function loadAudioFeed(){
+  try{
+    const { data } = await supabase.from('videos').select('*').eq('is_short', false).order('uploaded_at',{ascending:false});
+    feedCache = data || [];
+    renderFromCaches(globalSearchInput.value.trim());
+  }catch(e){
+    console.warn('loadAudioFeed err', e);
+    const localFeed = JSON.parse(localStorage.getItem('feed')||'[]');
+    feedCache = localFeed;
+    renderFromCaches(globalSearchInput.value.trim());
+  }
+}
+
+async function loadBitzFeed(){
+  try{
+    const { data } = await supabase.from('videos').select('*').eq('is_short', true).order('uploaded_at',{ascending:false});
+    bitzCache = data || [];
+    renderFromCaches(globalSearchInput.value.trim());
+  }catch(e){
+    console.warn('loadBitzFeed err', e);
+    const localBitz = JSON.parse(localStorage.getItem('bitz')||'[]');
+    bitzCache = localBitz;
+    renderFromCaches(globalSearchInput.value.trim());
+  }
+}
+
+/* ------------------- Upload handling (Cloudinary + Supabase insert) ------------------- */
+document.getElementById('uploadForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const channelName = document.getElementById('channelName').value.trim();
+  const videoTitle = document.getElementById('videoTitle').value.trim();
+  const isShort = document.getElementById('isShort').checked;
+  const channelImgFile = document.getElementById('channelImgFile').files[0];
+  const videoFile = document.getElementById('videoFile').files[0];
+  if(!videoFile){ alert('Select file'); return; }
+
+  const progressWrap = document.getElementById('uploadProgress');
+  const progressBar = document.getElementById('uploadProgressBar');
+  const status = document.getElementById('uploadStatus');
+  progressWrap.style.display = 'block'; progressBar.style.width = '0%'; status.textContent = 'Uploading...';
+
+  async function uploadFileToCloudinary(file){
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+      xhr.upload.addEventListener('progress', e=>{
+        if(e.lengthComputable){
+          const percent = Math.round((e.loaded / e.total) * 100);
+          progressBar.style.width = percent + '%';
+        }
+      });
+
+      xhr.onload = () => {
+        if(xhr.status >= 200 && xhr.status < 300){
+          try{
+            const res = JSON.parse(xhr.responseText);
+            resolve(res.secure_url);
+          }catch(err){ reject(err); }
+        } else reject(new Error('Upload failed: ' + xhr.status));
+      };
+      xhr.onerror = () => reject(new Error('Upload network error'));
+      xhr.open('POST', CLOUDINARY_UPLOAD_URL);
+      xhr.send(fd);
+    });
+  }
+
+  try{
+    const channelImgURL = channelImgFile ? await uploadFileToCloudinary(channelImgFile) : null;
+    const mediaURL = await uploadFileToCloudinary(videoFile);
+    const mediaType = videoFile.type.startsWith('video') ? 'video' : 'audio';
+
+    const newMedia = {
+      user_id: currentUserId, // ensure user_id present to avoid NOT NULL error
+      userId: currentUserId,  // also store userId for compatibility
+      channel_name: channelName || 'Unknown',
+      channel_img: channelImgURL,
+      title: videoTitle || 'Untitled',
+      file_url: mediaURL,
+      is_short: isShort,
+      uploaded_at: new Date().toISOString(),
+      views: 0, likes: 0, dislikes: 0, subscribers: 0, shares: 0, earnings: 0
+    };
+
+    const { data, error } = await supabase.from('videos').insert([newMedia]).select().single();
+    if(error){ console.error('DB insert err', error); status.textContent = "Upload succeeded but DB insert failed: " + (error.message || JSON.stringify(error)); return; }
+
+    // also store in localStorage fallback
+    const key = isShort ? 'bitz' : 'feed';
+    const arr = JSON.parse(localStorage.getItem(key) || '[]');
+    arr.unshift(data);
+    localStorage.setItem(key, JSON.stringify(arr));
+
+    status.textContent = "Upload & saved!";
+    progressBar.style.width = '100%';
+    document.getElementById('uploadForm').reset();
+
+    await renderAllFromDBCache();
+  }catch(err){
+    console.error('upload error', err);
+    document.getElementById('uploadStatus').textContent = 'Upload failed: ' + (err.message || err);
+  } finally {
+    setTimeout(()=>{ progressWrap.style.display='none'; progressBar.style.width='0%'; }, 900);
+  }
+});
+
+/* ------------------- Dashboard & Withdraw handling ------------------- */
+async function loadUserDashboard(){
+  try{
+    const { data } = await supabase.from('videos').select('*').eq('user_id', currentUserId).order('uploaded_at',{ascending:false});
+    const container = document.getElementById('userVideos'); container.innerHTML = '';
+    if(data && data.length){
+      data.forEach(v=>{
+        const div = document.createElement('div');
+        div.className = 'user-video';
+        const media = v.file_url.match(/.(mp3|wav|ogg)$/i) ? `<audio src="${v.file_url}" controls></audio>` : `<video src="${v.file_url}" controls style="max-width:100%"></video>`;
+        div.innerHTML = `<div><strong>${safeHTML(v.title)}</strong> (${safeHTML(v.channel_name)})</div>${media}<div>Views: ${v.views||0} • Likes: ${v.likes||0} • ₹${((v.earnings||0)*RUPEE_PER_COIN).toFixed(2)}</div>`;
+        container.appendChild(div);
+      });
+    } else container.innerHTML = '<p>No uploads yet</p>';
+  }catch(e){
+    console.warn('loadUserDashboard err', e);
+    document.getElementById('userVideos').innerHTML = '<p>Error loading</p>';
+  }
+  // show earnings (sum of earnings table)
+  try{
+    const { data } = await supabase.from('earnings').select('coins').eq('userId', currentUserId);
+    let totalCoins = 0;
+    if(data && data.length) totalCoins = data.reduce((s,r)=>s + parseFloat(r.coins||0), 0);
+    else totalCoins = parseFloat(localStorage.getItem('indiCoins')||0);
+    coins = totalCoins;
+    updateWalletUI();
+    document.getElementById('userEarnings').textContent = `Total Coins: ${coins.toFixed(2)} (₹${(coins*RUPEE_PER_COIN).toFixed(2)})`;
+  }catch(e){ console.warn('earnings sum err', e); }
+
+  // Update user QR Code image
+  updateUserQrCode();
+
+  // Setup QR Code scanner
+  setupQrScanner();
+}
+
+/* ------------------- Withdraw Form (secure server-side check & deduction) ------------------- */
+document.getElementById('withdrawFormNew').addEventListener('submit', async function(e){
+  e.preventDefault();
+  withdrawStatus.textContent = '';
+  const name = document.getElementById('wName').value.trim();
+  const channelName = document.getElementById('wChannel').value.trim();
+  const upi = document.getElementById('wUPI').value.trim();
+  const email = document.getElementById('wEmail').value.trim();
+  const phone = document.getElementById('wPhone').value.trim();
+  const amount = parseFloat(document.getElementById('wAmount').value);
+
+  if(!name || !channelName || !upi || !email || !phone || !amount){
+    alert('Fill all fields');
+    return;
+  }
+
+  // Pre-check: must be unlocked and shared >= 2
+  if(!unlockDone){
+    alert('You must pay ₹99 via UPI to unlock payouts first.');
+    return;
+  }
+  if(shareCount < 2){
+    alert('Share the app with 2 people before your first payout.');
+    return;
+  }
+
+  // Server-side coins check (authoritative)
+  try{
+    const { data: userData, error: fetchErr } = await supabase.from('users').select('coins').eq('id', currentUserId).limit(1).single();
+    let serverCoins = null;
+    if(fetchErr && fetchErr.code !== 'PGRST116') {
+      console.warn('fetch user coins err', fetchErr);
+    }
+    if(userData && typeof userData.coins !== 'undefined') serverCoins = parseFloat(userData.coins || 0);
+    else serverCoins = parseFloat(localStorage.getItem('indiCoins')||0);
+
+    if(amount > serverCoins){
+      alert('Server balance is insufficient for this withdrawal. Your server coins: ' + serverCoins);
+      return;
+    }
+
+    // 1) Insert withdrawal record (try multiple field names to avoid NOT NULL issues)
+    const insertPayload = {
+      userId: currentUserId,
+      user_id: currentUserId,
+      name,
+      channel_name: channelName,
+      upiId: upi,
+      email: email || null,
+      phone: phone || null,
+      totalEarnings: serverCoins,
+      withdrawAmount: amount,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    };
+
+    const { error: insertErr } = await supabase.from('withdrawals').insert([insertPayload]);
+    if(insertErr){ console.warn('withdraw insert err', insertErr); withdrawStatus.textContent = 'DB insert failed — try again later.'; return; }
+
+    // 2) Deduct server-side coins (atomic-ish)
+    const newServerCoins = serverCoins - amount;
+    const { error: updateErr } = await supabase.from('users').update({ coins: newServerCoins }).eq('id', currentUserId);
+    if(updateErr){ console.warn('server deduct err', updateErr); withdrawStatus.textContent = 'Server update failed — contact support.'; return; }
+
+    // 3) Deduct local coins and update UI
+    coins = newServerCoins;
+    localStorage.setItem('indiCoins', coins);
+    updateWalletUI();
+
+    // 4) Send email via formsubmit (AJAX)
+    try{
+      const formData = new FormData();
+      formData.append('Name', name);
+      formData.append('ChannelName', channelName);
+      formData.append('UPI', upi);
+      formData.append('Email', email);
+      formData.append('Phone', phone);
+      formData.append('Coins', coins.toFixed(2));
+      formData.append('Amount', amount.toFixed(2));
+      formData.append('_subject', 'IndiTube Withdrawal Request');
+
+      const resp = await fetch('https://formsubmit.co/ajax/aaravbretiya@gmail.com', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+        body: formData
+      });
+      const j = await resp.json().catch(()=>({}));
+      if(j.success || resp.ok) withdrawStatus.textContent = 'Withdraw request saved and email sent.';
+      else withdrawStatus.textContent = 'Withdraw saved but email failed.';
+    }catch(err){
+      console.warn('formsubmit err', err);
+      withdrawStatus.textContent = 'Withdraw saved but email failed.';
+    }
+
+    // refresh withdraw history
+    refreshWithdrawHistory();
+    document.getElementById('withdrawFormNew').reset();
+  }catch(err){
+    console.warn('withdraw err', err);
+    withdrawStatus.textContent = 'Error processing withdrawal.';
+  }
+});
+
+/* ------------------- Withdraw history ------------------- */
+async function refreshWithdrawHistory(){
+  try{
+    const { data } = await supabase.from('withdrawals').select('*').eq('userId', currentUserId).order('created_at', { ascending:false }).limit(50);
+    withdrawHistoryBody.innerHTML = '';
+    if(data && data.length){
+      data.forEach(r=>{
+        const tr = document.createElement('tr');
+        const date = new Date(r.created_at).toLocaleString();
+        const coinsAmt = parseFloat(r.withdrawAmount||0);
+        tr.innerHTML = `<td>${safeHTML(date)}</td><td>${safeHTML(coinsAmt.toString())}</td><td>₹${(coinsAmt*RUPEE_PER_COIN).toFixed(2)}</td><td>${safeHTML(r.status||'pending')}</td>`;
+        withdrawHistoryBody.appendChild(tr);
+      });
+    } else {
+      withdrawHistoryBody.innerHTML = '<tr><td colspan="4">No withdrawals yet</td></tr>';
+    }
+  }catch(e){
+    console.warn('refreshWithdrawHistory err', e);
+    withdrawHistoryBody.innerHTML = '<tr><td colspan="4">Error loading history</td></tr>';
+  }
+}
+
+/* ------------------- QR Code Generation & Scanner ------------------- */
+
+// Update QR code image with user-specific URL
+function updateUserQrCode() {
+  const userUrl = `${window.location.origin}/?user=${encodeURIComponent(currentUserId)}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(userUrl)}&size=150x150`;
+  document.getElementById('userQrCode').src = qrCodeUrl;
+}
+
+// Setup and start QR scanner
+function setupQrScanner() {
+  const qrScannerElementId = "qr-scanner";
+  const qrScanResultEl = document.getElementById('qr-scan-result');
+
+  if(window.html5QrScanner) {
+    window.html5QrScanner.clear().catch(e => console.error(e));
+  }
+
+  window.html5QrScanner = new Html5Qrcode(qrScannerElementId);
+
+  const config = { fps: 10, qrbox: 250 };
+
+  function onScanSuccess(decodedText, decodedResult) {
+    window.html5QrScanner.stop().then(() => {
+      qrScanResultEl.textContent = `Scanned: ${decodedText}`;
+      if(decodedText.startsWith('http')) {
+        window.open(decodedText, '_blank');
+      }
+    }).catch(err => console.error('Stop scanner error:', err));
+  }
+
+  function onScanFailure(error) {}
+
+  Html5Qrcode.getCameras().then(cameras => {
+    if(cameras && cameras.length) {
+      window.html5QrScanner.start(
+        { facingMode: "environment" }, 
+        config, 
+        onScanSuccess,
+        onScanFailure
+      ).catch(err => {
+        console.warn('Unable to start QR scanner:', err);
+        qrScanResultEl.textContent = 'Error starting scanner: '+ err;
+      });
+    } else {
+      qrScanResultEl.textContent = 'No camera found to scan QR codes.';
+    }
+  }).catch(err => {
+    console.error('Error getting cameras:', err);
+    qrScanResultEl.textContent = 'Camera error: ' + err;
+  });
+}
+
+/* ------------------- Search box events ------------------- */
+globalSearchInput.addEventListener('input', ()=>{
+  const term = globalSearchInput.value.trim();
+  renderFromCaches(term);
+});
+searchClearBtn.addEventListener('click', ()=>{
+  globalSearchInput.value = '';
+  renderFromCaches('');
+});
+
+/* ------------------- Init load ------------------- */
+renderAllFromDBCache();
+loadVideoFeed();
+loadAudioFeed();
+loadBitzFeed();
+refreshWithdrawHistory();
+
+/* Expose functions to window (so onclicks in HTML for cards work) */
+window.like = like;
+window.dislike = dislike;
+window.subscribe = subscribe;
+window.share = share;
+
+</script>
+
+</body>
+</html>
